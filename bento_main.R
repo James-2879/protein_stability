@@ -49,7 +49,6 @@ all_data <- bind_rows(pre_2305, pre_2309, pre_1807, pre_422,
 remove(pre_2305, pre_2309, pre_1807, pre_422,
        post_2305, post_2309, post_1807, post_422) 
 
-
 ### Graphing ----
 
 #### Base plot ----
