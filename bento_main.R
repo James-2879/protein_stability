@@ -1,7 +1,11 @@
 library(tidyverse)
+library(plotly)
 library(roxygen2)
 
+### Functions ----
+
 add_metadata <- function(data, tank, time) {
+  #' Clean metadata prior to df creation.
   data %>% 
     mutate("dosage" = substr(dose, 1, 1)) %>% 
     mutate("repeat" = substr(dose, 2, 2)) %>% 
@@ -14,6 +18,8 @@ add_metadata <- function(data, tank, time) {
     mutate(wine_hot = if_else(wine_hot == "-", water, as.double(wine_hot))) %>% 
     mutate(wine_cold = if_else(wine_cold == "-", water, as.double(wine_cold)))
 }
+
+### Data prep ----
 
 pre_2305 <- read_tsv(file = "~/Documents/bento/data/input/2305_pre.tsv") %>% 
   add_metadata(tank = 2305, time = 0)
@@ -33,19 +39,36 @@ post_1807 <- read_tsv(file = "~/Documents/bento/data/input/1807_post.tsv") %>%
 post_422 <- read_tsv(file = "~/Documents/bento/data/input/422_post.tsv") %>% 
   add_metadata(tank = 422, time = 1)
 
+# change data shape
 all_data <- bind_rows(pre_2305, pre_2309, pre_1807, pre_422,
                       post_2305, post_2309, post_1807, post_422) %>% 
   pivot_longer(cols = (5:7), names_to = "solvent", values_to = "turbidity") %>% 
   mutate("dosage" = as.double(dosage))
 
+# clean up
 remove(pre_2305, pre_2309, pre_1807, pre_422,
        post_2305, post_2309, post_1807, post_422) 
 
 
+### Graphing ----
 
-# maybe find the percent different between the media as a basic metric o efficiency
+#### Base plot ----
 
-# ---- Graphing
+base_plot <- all_data %>%
+  filter(time == 1) %>%
+  ggplot(mapping = aes(
+    x = dosage,
+    y = log10(turbidity),
+    group = solvent
+  )) +
+  # geom_point() +
+  geom_hline(yintercept = log10(2), color = "#5cd65c") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank()
+  )
+
+#### Scatter plot  ----
 
 plot_scatter <- all_data %>%
   filter(time == 1) %>%
@@ -64,27 +87,12 @@ plot_scatter <- all_data %>%
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank()
-  )
-png(filename = "~/Downloads/scatter.png", width = 3000, height = 1500, res = 300)
-plot_scatter
-dev.off()
+  ) +
+  xlab("dosage (#/kgal)")
 
-plot_scatter_minimal <- all_data %>%
-  filter(time == 1) %>%
-  ggplot(mapping = aes(
-    x = dosage,
-    y = log10(turbidity),
-    group = solvent
-  )) +
-  # geom_point() +
-  geom_hline(yintercept = log10(2), color = "#5cd65c") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank()
-  )
-plot_scatter_minimal
+#### Trends plot ----
 
-plot_scatter_trends <- plot_scatter_minimal + 
+plot_trends <- base_plot +
   geom_smooth(data = all_data %>% filter(solvent == "wine_hot", time == 1), 
               aes(x = dosage,
                   y = log10(turbidity),
@@ -106,12 +114,11 @@ plot_scatter_trends <- plot_scatter_minimal +
               se = FALSE,
               # color = "orange"
   ) +
-  scale_color_manual(name = "Solvent", values =c("blue", "red", "orange"))
+  scale_color_manual(name = "Solvent", values =c("blue", "red", "orange")) +
+  xlab("dosage (#/kgal)")
 
-png(filename = "~/Downloads/trends.png", width = 3000, height = 1500, res = 300)
-plot_scatter_trends
-dev.off()
-  
+#### Heat map ----  
+
 heatmap <- all_data %>% 
   filter(time == 1) %>% 
   # unite(col = repeat_solvent, `repeat`, solvent) %>% 
@@ -126,30 +133,37 @@ heatmap <- all_data %>%
         panel.background = element_blank()
   ) +
   xlab("solvent") +
+  ylab("dosage (#/kgal)")
   labs(title = "Heatmap of solvent impact on stability across dosages",
        subtitle = "Orange indicates instability, white indicates 'just stable', green indicates stable")
  
+### Save plots ----
+
+png(filename = "~/Downloads/scatter.png", width = 3000, height = 1500, res = 300)
+plot_scatter
+dev.off()
+
+png(filename = "~/Downloads/trends.png", width = 3000, height = 1500, res = 300)
+plot_trends
+dev.off()
+
 png(filename = "~/Downloads/heatmap.png", width = 3000, height = 1500, res = 300) 
 heatmap
 dev.off()
 
-
-# ---- extra
-
+### Addition estimations ----
 
 NTU <- 40.5
 required_addition <- (log10(2)-log10(NTU))
 
+### Percent efficacy ----
 
-# Percent differences
-
-
+# Quant
 data <- all_data %>% 
   filter(time == 1) %>% 
   select(-time) %>% 
   group_by(dosage, solvent) %>% 
   summarise("mean" = mean(turbidity))
 
-library(plotly)
-temp_plotly <- ggplotly(plot_scatter_trends)
-temp_plotly
+# Approximate
+ggplotly(plot_trends)
